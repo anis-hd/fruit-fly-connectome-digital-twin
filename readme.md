@@ -12,7 +12,7 @@ The brain and neural network were built manually (custom LIF simulation over the
 
 ## Data files (in this folder)
 
-From the Male CNS v1.0 dataset (minconf 0.5):
+From the Male CNS v1.0 dataset (minconf 0.5) — based on the Google and Janelia connectome project: https://male-cns.janelia.org/
 
 - `body-annotations-male-cns-v1.0-minconf-0.5.feather` — ~211k neurons, types, soma locations
 - `body-neurotransmitters-male-cns-v1.0.feather` — per-neuron NT predictions → excitatory/inhibitory signs
