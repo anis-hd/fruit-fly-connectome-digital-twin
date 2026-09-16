@@ -1,0 +1,17 @@
+# Connectome data (training data, large binaries)
+*.feather
+
+# Logs
+*.log
+MUJOCO_LOG.TXT
+sim.log
+server.log
+server.err.log
+
+# Video
+*.mp4
+
+# Python
+__pycache__/
+*.pyc
+.venv/

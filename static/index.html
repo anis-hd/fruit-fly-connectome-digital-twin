@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fly Brain - Real-time Neural Visualization</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #0a0a0f; color: #e0e0e0; overflow: hidden; height: 100vh; }
+        #app { display: grid; grid-template-columns: 380px 1fr; grid-template-rows: 1fr; height: 100vh; }
+        @media (max-width: 1200px) { #app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; } }
+
+        .panel { background: #111217; border-right: 1px solid #2a2d36; display: flex; flex-direction: column; overflow: hidden; }
+        .panel-header { padding: 16px 20px; border-bottom: 1px solid #2a2d36; background: #16181d; }
+        .panel-header h2 { font-size: 14px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #888; }
+        .panel-content { flex: 1; overflow-y: auto; padding: 16px; }
+
+        .canvas-container { position: relative; background: #050508; overflow: hidden; }
+        #brain-canvas { width: 100%; height: 100%; display: block; }
+        #topdown-canvas { width: 100%; height: 100%; display: block; }
+        #flygym-img { width: 100%; height: 100%; object-fit: contain; background: #000; display: block; }
+        .lab-toolbar { position: absolute; top: 8px; right: 10px; z-index: 5; display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; max-width: 70%; }
+        .lab-btn { padding: 4px 9px; background: rgba(17,18,23,0.9); border: 1px solid #333; border-radius: 6px; color: #e0e0e0; font-size: 11px; cursor: pointer; }
+        .lab-btn:hover { border-color: #00ff88; color: #00ff88; }
+        .lab-btn.active { background: rgba(0,255,136,0.25); border-color: #00ff88; color: #00ff88; }
+        .lab-bottom { position: absolute; left: 10px; right: 10px; bottom: 8px; z-index: 5; background: rgba(10,10,15,0.82); border: 1px solid #2a2d36; border-radius: 8px; padding: 6px 10px; font-size: 10px; }
+        .lab-row { display: flex; align-items: center; gap: 8px; color: #888; }
+        .lab-behavior { color: #00ff88; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; min-width: 70px; }
+        .lab-gain { margin-left: auto; display: flex; align-items: center; gap: 6px; font-family: monospace; }
+        .lab-gain input { width: 90px; accent-color: #00ff88; }
+        .lab-drives { display: grid; grid-template-columns: auto 1fr auto 1fr auto 1fr auto 1fr auto 1fr; gap: 2px 6px; align-items: center; margin-top: 4px; font-family: monospace; }
+        .drive-bar.lab-drive { margin: 0; }
+        .lab-status { color: #666; font-family: monospace; margin-top: 4px; }
+
+        .viewport-stack { position: absolute; inset: 0; padding: 64px 12px 178px 12px; display: flex; flex-direction: row; gap: 10px; }
+        #motor-bar { position: absolute; left: 12px; right: 12px; bottom: 12px; height: 154px; z-index: 6; background: rgba(10,10,15,0.92); border: 1px solid #2a2d36; border-radius: 10px; padding: 8px 12px 10px 12px; display: flex; flex-direction: column; }
+        .motor-bar-head { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+        .motor-bar-title { font-size: 11px; letter-spacing: 0.4px; color: #888; }
+        .motor-bar-scale { font-size: 10px; color: #666; font-family: monospace; }
+        .motor-legend { margin-top: 0; margin-left: auto; }
+        .motor-chart-wrap { flex: 1; min-height: 0; background: #0a0a0f; border: 1px solid #222; border-radius: 8px; overflow: hidden; }
+        #motor-chart { width: 100%; height: 100%; display: block; }
+        .viewport { position: relative; background: #050508; border: 1px solid #222; border-radius: 10px; overflow: hidden; min-width: 0; min-height: 200px; }
+        .viewport-3d { flex: 1; }
+        .viewport-topdown { flex: 1; }
+        .viewport-fly { flex: 1; }
+        @media (max-width: 900px) { .viewport-stack { flex-direction: column; } }
+        .viewport-stack.mode-3d .viewport-topdown,
+        .viewport-stack.mode-3d .viewport-fly { display: none; }
+        .viewport-stack.mode-3d .viewport-3d { flex: 1; }
+        .viewport-stack.mode-topdown .viewport-3d,
+        .viewport-stack.mode-topdown .viewport-fly { display: none; }
+        .viewport-stack.mode-topdown .viewport-topdown { flex: 1; }
+        .viewport-stack.mode-fly .viewport-3d,
+        .viewport-stack.mode-fly .viewport-topdown { display: none; }
+        .viewport-stack.mode-fly .viewport-fly { flex: 1; }
+        .viewport-stack.mode-split .viewport-fly { display: none; }
+        .viewport-label { position: absolute; top: 8px; left: 10px; z-index: 5; font-size: 11px; letter-spacing: 0.4px; color: #888; background: rgba(10,10,15,0.75); border: 1px solid #2a2d36; padding: 4px 10px; border-radius: 20px; pointer-events: none; }
+        .viewport-label b { color: #00ff88; font-weight: 600; }
+        .topdown-axes { position: absolute; right: 10px; top: 8px; z-index: 5; font-size: 10px; color: #666; background: rgba(10,10,15,0.75); border: 1px solid #2a2d36; padding: 4px 10px; border-radius: 6px; pointer-events: none; font-family: monospace; }
+        .topdown-status { position: absolute; left: 10px; bottom: 8px; z-index: 5; font-size: 10px; color: #00ff88; background: rgba(10,10,15,0.8); border: 1px solid #2a2d36; padding: 4px 10px; border-radius: 6px; pointer-events: none; font-family: monospace; }
+        .drive-bar { height: 6px; background: #0a0a0f; border: 1px solid #222; border-radius: 3px; margin: 2px 0 8px 0; overflow: hidden; }
+        .drive-fill { height: 100%; width: 0%; background: linear-gradient(90deg, #00ff88, #ffaa00); transition: width 0.3s; }
+
+        .status-bar { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+        .status-indicator { display: flex; align-items: center; gap: 6px; padding: 6px 12px; background: #1e1f26; border-radius: 20px; font-size: 12px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #444; }
+        .status-dot.connected { background: #00ff88; box-shadow: 0 0 8px #00ff88; }
+        .status-dot.running { background: #ffaa00; box-shadow: 0 0 8px #ffaa00; animation: pulse 1s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+        .control-group { margin-bottom: 20px; }
+        .control-label { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; color: #aaa; }
+        .control-label span.value { color: #00ff88; font-family: monospace; }
+        input[type="range"] { width: 100%; accent-color: #00ff88; }
+        .btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+        .btn { flex: 1; min-width: 80px; padding: 10px 16px; border: none; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; }
+        .btn-primary { background: linear-gradient(135deg, #00ff88, #00cc6a); color: #050508; }
+        .btn-primary:hover { box-shadow: 0 0 20px rgba(0, 255, 136, 0.4); transform: translateY(-1px); }
+        .btn-secondary { background: #1e1f26; color: #e0e0e0; border: 1px solid #333; }
+        .btn-secondary:hover { background: #2a2d36; border-color: #444; }
+        .btn-danger { background: #2a1010; color: #ff6b6b; border: 1px solid #442222; }
+        .btn-danger:hover { background: #3a1515; border-color: #ff6b6b; box-shadow: 0 0 15px rgba(255, 107, 107, 0.3); }
+
+        .preset-buttons { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
+        .preset-btn { padding: 8px; background: #1e1f26; border: 1px solid #333; border-radius: 4px; color: #aaa; font-size: 11px; cursor: pointer; transition: all 0.15s; }
+        .preset-btn:hover, .preset-btn.active { background: #00ff88; color: #050508; border-color: #00ff88; }
+
+        .chart-container { height: 160px; background: #0a0a0f; border-radius: 8px; border: 1px solid #222; position: relative; margin-bottom: 16px; }
+        .legend { flex-wrap: wrap; row-gap: 6px; }
+        canvas.chart { width: 100%; height: 100%; display: block; }
+
+        .legend { display: flex; gap: 16px; font-size: 11px; color: #888; margin-top: 8px; }
+        .legend-item { display: flex; align-items: center; gap: 6px; }
+        .legend-color { width: 12px; height: 12px; border-radius: 2px; }
+
+        .raster-container { height: 200px; background: #0a0a0f; border-radius: 8px; border: 1px solid #222; position: relative; }
+        #raster-canvas { width: 100%; height: 100%; display: block; }
+
+        .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .info-card { background: #16181d; border: 1px solid #2a2d36; border-radius: 8px; padding: 12px; }
+        .info-card .label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+        .info-card .value { font-size: 18px; font-weight: 600; color: #00ff88; font-family: monospace; margin-top: 4px; }
+
+        .neuron-list { max-height: 200px; overflow-y: auto; }
+        .neuron-item { display: flex; justify-content: space-between; padding: 6px 8px; border-radius: 4px; font-size: 12px; cursor: pointer; transition: background 0.1s; }
+        .neuron-item:hover { background: #1e1f26; }
+        .neuron-item.selected { background: rgba(0, 255, 136, 0.1); border-left: 2px solid #00ff88; }
+        .neuron-type { font-size: 10px; text-transform: uppercase; }
+        .neuron-type.sensory { color: #00aaff; }
+        .neuron-type.interneuron { color: #aa88ff; }
+        .neuron-type.motor { color: #ffaa00; }
+
+        .toolbar { position: absolute; top: 16px; left: 16px; right: 16px; display: flex; gap: 8px; z-index: 10; flex-wrap: wrap; }
+        .toolbar-btn { padding: 8px 14px; background: rgba(17, 18, 23, 0.9); border: 1px solid #333; border-radius: 6px; color: #e0e0e0; font-size: 12px; cursor: pointer; backdrop-filter: blur(10px); transition: all 0.15s; }
+        .toolbar-btn:hover { background: rgba(0, 255, 136, 0.2); border-color: #00ff88; color: #00ff88; }
+        .toolbar-btn.active { background: rgba(0, 255, 136, 0.3); border-color: #00ff88; color: #00ff88; }
+
+        .view-mode { display: flex; gap: 4px; background: rgba(17, 18, 23, 0.9); border: 1px solid #333; border-radius: 6px; padding: 4px; }
+        .view-mode .toolbar-btn { border: none; background: transparent; border-radius: 4px; padding: 6px 10px; }
+        .view-mode .toolbar-btn.active { background: #00ff88; color: #050508; }
+
+        .sidebar-right { display: none; }
+        @media (min-width: 1200px) { .sidebar-right { display: flex; flex-direction: column; } }
+
+        .hidden { display: none !important; }
+        .tooltip { position: absolute; background: rgba(10, 10, 15, 0.95); border: 1px solid #333; border-radius: 6px; padding: 10px 12px; font-size: 12px; pointer-events: none; z-index: 100; max-width: 250px; }
+        .tooltip .title { color: #00ff88; font-weight: 600; margin-bottom: 4px; }
+        .tooltip .row { display: flex; justify-content: space-between; gap: 12px; margin: 2px 0; }
+        .tooltip .row .key { color: #888; }
+        .tooltip .row .val { color: #fff; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="panel">
+            <div class="panel-header"><h2>Control Panel</h2></div>
+            <div class="panel-content">
+                <div class="status-bar">
+                    <div class="status-indicator">
+                        <div class="status-dot" id="conn-dot"></div>
+                        <span id="conn-status">Disconnected</span>
+                    </div>
+                    <div class="status-indicator">
+                        <div class="status-dot" id="sim-dot"></div>
+                        <span id="sim-status">Stopped</span>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label"><span>Simulation Speed</span><span class="value" id="speed-val">1.0x</span></div>
+                    <input type="range" id="speed" min="0.1" max="5" step="0.1" value="1">
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label"><span>Synaptic Gain</span><span class="value" id="gain-val">2.5</span></div>
+                    <input type="range" id="gain" min="0.5" max="5" step="0.1" value="2.5">
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label"><span>Background Noise</span><span class="value" id="noise-val">0.06</span></div>
+                    <input type="range" id="noise" min="0" max="0.3" step="0.01" value="0.06">
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label"><span>Membrane Tau (ms)</span><span class="value" id="tau-val">10</span></div>
+                    <input type="range" id="tau" min="5" max="50" step="1" value="10">
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label"><span>Spike Threshold</span><span class="value" id="thr-val">0.8</span></div>
+                    <input type="range" id="thr" min="0.3" max="2" step="0.1" value="0.8">
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label"><span>Stim Rate (Hz)</span><span class="value" id="stim-rate-val">60</span></div>
+                    <input type="range" id="stim-rate" min="5" max="200" step="5" value="60">
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label"><span>Stim Fraction</span><span class="value" id="stim-frac-val">0.3</span></div>
+                    <input type="range" id="stim-frac" min="0.05" max="1" step="0.05" value="0.3">
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label"><span>Stim Current</span><span class="value" id="i-ext-val">2.0</span></div>
+                    <input type="range" id="i-ext" min="0.5" max="5" step="0.1" value="2.0">
+                </div>
+
+                <div class="btn-group">
+                    <button class="btn btn-primary" id="btn-run">Run</button>
+                    <button class="btn btn-secondary" id="btn-pause">Pause</button>
+                    <button class="btn btn-secondary" id="btn-reset">Reset</button>
+                </div>
+
+                <div class="control-group" style="margin-top: 16px;">
+                    <div class="control-label"><span>Manual Stimulation</span></div>
+                    <div class="btn-group">
+                        <button class="btn btn-primary" id="btn-stimulate">Stimulate Sensory</button>
+                        <button class="btn btn-secondary" id="btn-stimulate-all">Stimulate All</button>
+                    </div>
+                </div>
+
+                <div class="preset-buttons" style="margin-top: 16px;">
+                    <button class="preset-btn" data-preset="default">Default</button>
+                    <button class="preset-btn" data-preset="high-gain">High Gain</button>
+                    <button class="preset-btn" data-preset="low-noise">Low Noise</button>
+                    <button class="preset-btn" data-preset="burst">Burst Mode</button>
+                    <button class="preset-btn" data-preset="quiet">Quiet</button>
+                    <button class="preset-btn" data-preset="seizure">Seizure</button>
+                </div>
+
+                <div class="chart-container">
+                    <canvas class="chart" id="rate-chart"></canvas>
+                </div>
+                <div class="legend">
+                    <div class="legend-item"><div class="legend-color" style="background: #00ff88;"></div>Pop Rate</div>
+                    <div class="legend-item"><div class="legend-color" style="background: #ffaa00;"></div>Motor Rate</div>
+                </div>
+
+                <div class="raster-container">
+                    <canvas id="raster-canvas"></canvas>
+                </div>
+
+                <div class="info-grid">
+                    <div class="info-card"><div class="label">Total Neurons</div><div class="value" id="stat-neurons">-</div></div>
+                    <div class="info-card"><div class="label">Synapses</div><div class="value" id="stat-synapses">-</div></div>
+                    <div class="info-card"><div class="label">Sensory</div><div class="value" id="stat-sensory">-</div></div>
+                    <div class="info-card"><div class="label">Motor</div><div class="value" id="stat-motor">-</div></div>
+                    <div class="info-card"><div class="label">Monitored</div><div class="value" id="stat-monitored">-</div></div>
+                    <div class="info-card"><div class="label">Step</div><div class="value" id="stat-step">0</div></div>
+                    <div class="info-card"><div class="label">Pop Rate</div><div class="value" id="stat-poprate">0.00%</div></div>
+                    <div class="info-card"><div class="label">Motor Rate</div><div class="value" id="stat-motrate">0.00%</div></div>
+                </div>
+
+                </div>
+        </div>
+
+        <div class="canvas-container">
+            <div class="toolbar">
+                <div class="view-mode">
+                    <button class="toolbar-btn active" data-view="all">All</button>
+                    <button class="toolbar-btn" data-view="split">Brain</button>
+                    <button class="toolbar-btn" data-view="3d">3D Brain</button>
+                    <button class="toolbar-btn" data-view="topdown">Top-Down</button>
+                    <button class="toolbar-btn" data-view="fly">Fly</button>
+                </div>
+                <div style="flex: 1;"></div>
+                <div class="status-indicator" style="background: transparent; padding: 0;">
+                    <div class="status-dot" id="render-dot"></div>
+                    <span id="fps-counter">0 FPS</span>
+                </div>
+            </div>
+            <div class="viewport-stack mode-all" id="viewport-stack">
+                <div class="viewport viewport-3d">
+                    <div class="viewport-label"><b>3D Brain</b> — drag to orbit · scroll to zoom</div>
+                    <canvas id="brain-canvas"></canvas>
+                </div>
+                <div class="viewport viewport-topdown">
+                    <div class="viewport-label"><b>Top-Down (dorsal)</b> — X → horizontal · Z → vertical · same spikes</div>
+                    <div class="topdown-axes">+Z ant ▼ · R ◀ ▶ L</div>
+                    <div class="topdown-status" id="topdown-status">Loading centroids…</div>
+                    <canvas id="topdown-canvas"></canvas>
+                </div>
+                <div class="viewport viewport-fly">
+                    <div class="viewport-label"><b>FlyGym</b> — MuJoCo fly · brain-driven</div>
+                    <img id="flygym-img" alt="FlyGym render">
+                    <div class="lab-bottom">
+                        <div class="lab-row">
+                            <button class="lab-btn" id="btn-flyfood">Drop food</button>
+                            <button class="lab-btn" id="btn-flyreset">Reset fly</button>
+                            <span class="lab-status" id="flygym-status">waiting for backend…</span>
+                        </div>
+                        <div class="lab-status" id="flygym-tele">food — · touch — · speed —</div>
+                    </div>
+                </div>
+            </div>
+            <div id="motor-bar">
+                <div class="motor-bar-head">
+                    <span class="motor-bar-title">Motor Pools</span>
+                    <span class="motor-bar-scale">firing rate x50</span>
+                    <div class="legend motor-legend">
+                        <div class="legend-item"><div class="legend-color" style="background: #00aaff;"></div>Leg L</div>
+                        <div class="legend-item"><div class="legend-color" style="background: #ff66aa;"></div>Leg R</div>
+                        <div class="legend-item"><div class="legend-color" style="background: #b48cff;"></div>Desc</div>
+                        <div class="legend-item"><div class="legend-color" style="background: #ffd166;"></div>T1</div>
+                        <div class="legend-item"><div class="legend-color" style="background: #06d6a0;"></div>T2</div>
+                        <div class="legend-item"><div class="legend-color" style="background: #ef476f;"></div>T3</div>
+                    </div>
+                </div>
+                <div class="motor-chart-wrap">
+                    <canvas class="chart" id="motor-chart"></canvas>
+                </div>
+            </div>
+            <div class="tooltip hidden" id="tooltip"></div>
+        </div>
+
+        <div class="panel sidebar-right">
+            <div class="panel-header"><h2>Neuron Inspector</h2></div>
+            <div class="panel-content">
+                <div id="neuron-detail" style="text-align: center; color: #666; padding: 40px;">
+                    Click a neuron in 3D view to inspect
+                </div>
+                <div class="neuron-list" id="neuron-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.165.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.165.0/examples/jsm/"
+        }
+    }
+    </script>
+    <script type="module" src="/static/main.js?v=17"></script>
+    <div id="boot-error" class="hidden" style="position: fixed; top: 12px; left: 50%; transform: translateX(-50%); z-index: 1000; background: #2a1010; border: 1px solid #ff6b6b; border-radius: 8px; padding: 10px 18px; font-size: 13px; color: #ffb3b3; max-width: 640px; text-align: center;"></div>
+    <script>
+    // If the module below never boots (CDN blocked, WebGL missing, cached
+    // bundle), the whole UI stays dark with no explanation. Surface it.
+    setTimeout(function () {
+        if (!window.__flybrain_booted) {
+            var el = document.getElementById('boot-error');
+            var hints = [];
+            if (!window.WebGLRenderingContext) hints.push('no WebGL in this browser');
+            hints.push('open DevTools Console (F12) for the real error');
+            hints.push('hard-refresh (Ctrl+Shift+R) to bypass cached main.js');
+            hints.push('confirm the backend is up: http://localhost:8000/api/state');
+            el.textContent = 'UI failed to start — ' + hints.join(' · ');
+            el.classList.remove('hidden');
+        }
+    }, 6000);
+    </script>
+</body>
+</html>
