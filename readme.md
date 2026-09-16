@@ -1,4 +1,4 @@
-# Fly Brain Simulator
+# Fruit-Fly Connectome Digital Twin
 
 Real-time spiking network of the adult male *Drosophila* CNS connectome. Feather files → signed sparse graph → LIF neurons → live 3D / raster visualization. Every flash is a simulated spike.
 
