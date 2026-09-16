@@ -2,6 +2,8 @@
 
 Real-time spiking network of the adult male *Drosophila* CNS connectome. Feather files → signed sparse graph → LIF neurons → live 3D / raster visualization. Every flash is a simulated spike.
 
+![Fruit-Fly Digital Twin UI](gif.gif)
+
 The brain and neural network were built manually (custom LIF simulation over the connectome graph). FlyGym is used only for the body and environment, because it offers highly detailed body sensors and actuators.
 
 - `server.py` — live FastAPI + WebSocket backend (use this)
